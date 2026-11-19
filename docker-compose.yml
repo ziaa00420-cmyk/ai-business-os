@@ -1,0 +1,40 @@
+# Local stack: Postgres 16, the API and the web app.
+#   cp .env.example .env && docker compose up --build
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: aibos
+      POSTGRES_PASSWORD: aibos
+      POSTGRES_DB: aibos
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aibos"]
+      interval: 2s
+      retries: 20
+
+  api:
+    build: ./services/api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://aibos_app:aibos_app@db:5432/aibos
+      MIGRATIONS_DATABASE_URL: postgresql+psycopg://aibos:aibos@db:5432/aibos
+      STORAGE_DIR: /data/storage
+    ports: ["8000:8000"]
+    volumes: [storage:/data/storage]
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    build:
+      context: ./apps/web
+      args: { NEXT_PUBLIC_API_URL: "http://localhost:8000" }
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  storage:
